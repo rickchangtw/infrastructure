@@ -1,0 +1,17 @@
+# Host vars for Development host dev-dc1 (100.94.136.15, pollux)
+#
+# NO SECRETS in git. Secret values are looked up at run time from the host
+# 0600 env files or the host-specific vault (vars/vault/discourse-dev.vault.yml).
+#
+# The discourse_deps role reads the host-side env files listed below; names
+# only, values on the host.
+
+dev_site_hostname: pollux.infra
+
+# Host-side 0600 env files consumed by the Quadlet units (names only):
+#   {{ discourse_env_dir }}/discourse.env           (DISCOURSE_DB_PASSWORD, SMTP creds)
+#   {{ discourse_env_dir }}/discourse-postgres.env  (DISCOURSE_DB_PASSWORD, DISCOURSE_DB_USER, DISCOURSE_DB_NAME)
+#   {{ discourse_env_dir }}/discourse-redis.env     (DISCOURSE_REDIS_PASSWORD, DISCOURSE_REDIS_DB)
+#
+# Their real values are seeded by the operator (or a vault-seeded task) once,
+# never committed and never printed by a playbook task.
