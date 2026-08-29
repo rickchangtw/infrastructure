@@ -1,0 +1,80 @@
+---
+# Rollback: stop the OmniRoute gateway, remove the container, and restore the
+# ORIGINAL Paperclip model provider (the agent-env snapshot taken by the deploy
+# playbook). Finally re-asserts the pre-existing Paperclip (3100) and Hermes
+# (3101) health endpoints to prove the primary stack is untouched.
+#
+# Precondition: omniroute-deploy.yml snapshots the current agent env to
+# {{ paperclip_env_backup_path }} BEFORE any change (see deploy playbook).
+#
+# Notes:
+#   - The systemd user unit is disabled first so the gateway cannot auto-restart.
+#   - Agent env restore is best-effort: the task is skipped if no snapshot
+#     exists (warn), and the Paperclip control-plane / Hermes health assertions
+#     are the actual success criteria.
+- name: Rollback - stop OmniRoute and restore original provider config
+  hosts: omniroute_dev
+  become: false
+  vars_files:
+    - ../vars/omniroute-dev.yml
+
+  tasks:
+    - name: Stop systemd user unit (prevents auto-restart)
+      ansible.builtin.systemd:
+        name: "{{ omniroute_unit_name }}"
+        scope: user
+        state: stopped
+        enabled: false
+
+    - name: Stop omniroute container (rootless)
+      containers.podman.podman_container:
+        name: "{{ omniroute_container_name }}"
+        state: stopped
+      failed_when: false   # already stopped/absent is fine
+
+    - name: Remove omniroute container (rootless)
+      containers.podman.podman_container:
+        name: "{{ omniroute_container_name }}"
+        state: absent
+
+    - name: Check rollback restore point exists
+      ansible.builtin.stat:
+        path: "{{ paperclip_env_backup_path }}"
+      when: paperclip_env_backup_path is defined and paperclip_env_backup_path | length > 0
+      register: backup_stat
+
+    - name: Restore Paperclip agent env to original provider
+      ansible.builtin.copy:
+        src: "{{ paperclip_env_backup_path }}"
+        dest: "{{ paperclip_env_path }}"
+      when:
+        - paperclip_env_path is defined and paperclip_env_path | length > 0
+        - backup_stat is defined and backup_stat.stat is defined and backup_stat.stat.exists
+
+    - name: Warn when no env snapshot exists to restore
+      ansible.builtin.debug:
+        msg: "No agent-env snapshot at {{ paperclip_env_backup_path | default('(unset)') }} - nothing to restore. Verify original provider manually."
+      when:
+        - paperclip_env_path is defined and paperclip_env_path | length > 0
+        - backup_stat is defined and backup_stat.stat is defined and not backup_stat.stat.exists
+
+    - name: Restart Paperclip agent runtime
+      ansible.builtin.systemd:
+        name: "{{ paperclip_agent_unit }}"
+        state: restarted
+      when: paperclip_agent_unit is defined and paperclip_agent_unit | length > 0
+      failed_when: false
+
+    - name: Assert Paperclip control plane health ({{ paperclip_health_url }})
+      ansible.builtin.uri:
+        url: "{{ paperclip_health_url }}"
+        status_code: 200
+        timeout: 30
+      when: paperclip_health_url is defined and paperclip_health_url | length > 0
+
+    - name: Assert Hermes/3101 health ({{ hermes_health_url }}) - untouched by rollback
+      ansible.builtin.uri:
+        url: "{{ hermes_health_url }}"
+        status_code: 200
+        timeout: 30
+      when: hermes_health_url is defined and hermes_health_url | length > 0

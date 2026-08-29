@@ -1,0 +1,66 @@
+---
+# Verify OmniRoute health + minimal LLM smoke on the Development (paperclip-v1)
+# host, per ONE-10 `infra-proposal` rev2.
+#   - Asserts the systemd user unit `container-omniroute` is active.
+#   - Asserts the gateway answers only on 127.0.0.1:20128.
+#   - Asserts the API /v1/models responds with a valid Bearer key.
+#   - Runs ONE chat completion via model "auto" (zero-config free route).
+#
+# Manual follow-ups (after this playbook is green):
+#   1. Pointer check: `curl -si http://127.0.0.1:20128/v1/chat/completions
+#      -H "Authorization: Bearer ..." -H "Content-Type: application/json"
+#      -d '{"model":"auto","messages":[{"role":"user","content":"hi"}],"max_tokens":8}'`
+#      and GREP the response headers for `x-omniroute-*`.
+#   2. Create the experimental opencode_local agent with model `omniroute/auto`
+#      and confirm OPENCODE_ALLOW_ALL_MODELS=true is in effect so the agent does
+#      not die on model discovery.
+- name: Verify OmniRoute health and LLM reachability
+  hosts: omniroute_dev
+  gather_facts: false
+  vars_files:
+    - ../vars/omniroute-dev.yml
+    - ../vars/vault/omniroute-dev.vault.yml   # OMNIROUTE_API_KEY
+
+  tasks:
+    - name: systemd user unit is active
+      ansible.builtin.systemd:
+        name: "{{ omniroute_unit_name }}"
+        scope: user
+      register: unit
+      failed_when: unit.status.ActiveState != "active"
+
+    - name: Port {{ omniroute_port }} listening on loopback only
+      ansible.builtin.wait_for:
+        host: "{{ omniroute_host }}"
+        port: "{{ omniroute_port | int }}"
+        state: started
+        timeout: 30
+
+    - name: Gateway API responding (models endpoint)
+      ansible.builtin.uri:
+        url: "http://{{ omniroute_host }}:{{ omniroute_port }}/v1/models"
+        headers:
+          Authorization: "Bearer {{ omniroute_api_key }}"
+        status_code: 200
+        timeout: 30
+
+    - name: Smoke chat completion via auto (free route)
+      ansible.builtin.uri:
+        url: "http://{{ omniroute_host }}:{{ omniroute_port }}/v1/chat/completions"
+        method: POST
+        headers:
+          Authorization: "Bearer {{ omniroute_api_key }}"
+          Content-Type: application/json
+        body_format: json
+        body:
+          model: auto
+          messages:
+            - role: user
+              content: "Reply with exactly: OK"
+          max_tokens: 32
+        status_code: 200
+        timeout: 60
+      register: smoke
+      failed_when:
+        - smoke.status != 200
+        - smoke.json.choices is not defined
