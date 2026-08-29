@@ -1,0 +1,34 @@
+---
+# dev-verify.yml — Development verification flow (ONE-12 plan §6, nine steps)
+#
+# Run AFTER a successful site.yml:
+#   ansible-playbook -i inventories/development/hosts.ini playbooks/dev-verify.yml
+#
+# Steps 1-3 are automated here; steps 4-9 are scripted manual QA actions that
+# the operator executes and records as the A2 promotion checklist. Results are
+# posted back to the ONE-14 issue as evidence (never secrets).
+- name: Verify Discourse Development deployment (9-step)
+  hosts: discourse_dev
+  gather_facts: false
+  become: false
+
+  roles:
+    - role: discourse-verify
+
+  tasks:
+    # Step 3 continued / administration initialization is performed by the
+    # verify role (rake admin:create) when a developer email is declared.
+    - name: Print the verification checklist (A2 gate evidence)
+      ansible.builtin.debug:
+        msg: "{{ discourse_verify_checklist }}"
+
+    - name: Emit manual QA checklist for steps 4-9
+      ansible.builtin.debug:
+        msg: |
+          Manual A2 steps to complete + record on ONE-14:
+          [4] Create test accounts: 管委會/管理室/住戶/待審核 (register + group assign).
+          [5] Publish announcements + discussion threads (categories, tags, locked cat).
+          [6] Permission tests: TL0 view limits, admin-only post category, review flow.
+          [7] Email test: welcome / notification / digest (mailhog or relay).
+          [8] Backup & restore rehearsal: discourse-backup.sh -> restore to new DB -> compare.
+          [9] Report: record checklist as the promotion gate for ONE-12 A2.
