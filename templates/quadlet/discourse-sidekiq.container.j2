@@ -1,0 +1,24 @@
+# Discourse Sidekiq (background jobs) container — ONE-12 plan §2.3
+# Joins the same pod; no public port. Runs the Sidekiq worker process of the
+# site image.
+[Unit]
+Description=Discourse Sidekiq
+Requires={{ discourse_postgres_container }}.service {{ discourse_redis_container }}.service
+After={{ discourse_postgres_container }}.service {{ discourse_redis_container }}.service
+
+[Container]
+ContainerName={{ discourse_sidekiq_container }}
+Pod={{ discourse_pod_name }}.pod
+Image={{ discourse_site_image }}
+EnvironmentFile={{ discourse_env_dir }}/discourse.env
+Volume={{ discourse_shared_volume }}:/shared:{{ discourse_volume_z }}
+Volume={{ discourse_logs_volume }}:/var/log:{{ discourse_volume_z }}
+{% if discourse_dev_shm_size is defined and discourse_dev_shm_size | length > 0 %}DevShmSize={{ discourse_dev_shm_size }}
+{% endif %}
+
+[Service]
+Restart=on-failure
+TimeoutStartSec=120
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,9 @@
+# Discourse pod (rootless, systemd user scope) — generated from ONE-12 plan §2.3
+[Unit]
+Description=Discourse Pod
+
+[Pod]
+PodName={{ discourse_pod_name }}
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,26 @@
+# Discourse PostgreSQL 15 container (dedicated, rootless) — ONE-12 plan §2.3
+# Dedicated DB user/name come from the host-side env file. No public port:
+# only reachable inside the pod. Data lives in a dedicated volume, never
+# shared with existing services.
+[Unit]
+Description=Discourse PostgreSQL
+Requires={{ discourse_pod_name }}.pod
+After={{ discourse_pod_name }}.pod
+
+[Container]
+ContainerName={{ discourse_postgres_container }}
+Pod={{ discourse_pod_name }}.pod
+Image={{ discourse_postgres_image }}
+EnvironmentFile={{ discourse_env_dir }}/discourse-postgres.env
+Volume={{ discourse_pgdata_volume }}:/var/lib/postgresql/data:{{ discourse_volume_z }}
+HealthCmd=pg_isready -U "$DISCOURSE_DB_USER" -d "$DISCOURSE_DB_NAME"
+HealthInterval=15s
+HealthTimeout=5s
+HealthRetries=5
+
+[Service]
+Restart=on-failure
+TimeoutStartSec=60
+
+[Install]
+WantedBy=default.target
