@@ -1,0 +1,35 @@
+# Development environment variables (ONE-12 / ONE-14)
+#
+# Environment-scoped defaults, values only. NO SECRETS here — secret values
+# live on the host in 0600 env files or the Ansible vault (vars/vault/*.vault.yml).
+# Only variable NAMES are referenced below.
+
+# Discourse itself
+discourse_env: development
+discourse_site_hostname: "{{ dev_site_hostname | default('pollux.infra') }}"
+discourse_version: "v3.2.4"
+
+# Install owner for rootless Podman / systemd user units
+discourse_run_user: deploy
+discourse_run_home: "{{ discourse_run_home_lookup | default('/home/deploy') }}"
+
+# Dev does not terminate TLS itself; internal hostname + plain http on the
+# pod-internal network. No public port is published.
+discourse_tls_enabled: false
+
+# Resource limits (dev-tuned)
+discourse_dev_shm_size: "512M"
+
+# SMTP is optional in dev; if the relay account is not yet provisioned, keep
+# "skip email setup" so provisioning still succeeds and email is tested later.
+discourse_smtp_address: ""          # name only, real value from env file/vault
+discourse_smtp_port: 587
+discourse_skip_email_setup: "{{ 1 if discourse_smtp_address | length == 0 else 0 }}"
+
+# Directories on the host (rootless account)
+discourse_quadlet_dir: "{{ discourse_run_home }}/.config/containers/systemd"
+discourse_env_dir: "{{ discourse_run_home }}/.config/containers/systemd"
+
+# Backup / retention (see roles/discourse-backup)
+discourse_backup_dest: "{{ discourse_run_home }}/discourse/backups"
+discourse_backup_retention_days: 14

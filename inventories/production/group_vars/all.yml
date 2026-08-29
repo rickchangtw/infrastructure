@@ -1,0 +1,27 @@
+# Production environment variables (ONE-12)
+#
+# Placeholder defaults for the (not yet authorized) Production deployment.
+# Requires A3/A4/A5 approval. The production host must be added to
+# inventories/production/hosts.ini by a human before prod-promote.yml is
+# ever run. NO SECRETS here — only names/defaults; real values live in the
+# host 0600 env files or the host-specific vault.
+discourse_env: production
+discourse_site_hostname: "forum.opc4u.shop"   # DNS/TLS to be approved at A3
+discourse_version: "v3.2.4"
+
+discourse_run_user: deploy
+discourse_run_home: "{{ discourse_run_home_lookup | default('/home/deploy') }}"
+
+discourse_tls_enabled: true
+discourse_dev_shm_size: "512M"
+
+# Prod SMTP goes through the existing relay; values (not names) in vault/env.
+discourse_smtp_address: ""
+discourse_smtp_port: 587
+discourse_skip_email_setup: "{{ 1 if discourse_smtp_address | length == 0 else 0 }}"
+
+discourse_quadlet_dir: "{{ discourse_run_home }}/.config/containers/systemd"
+discourse_env_dir: "{{ discourse_run_home }}/.config/containers/systemd"
+
+discourse_backup_dest: "{{ discourse_run_home }}/discourse/backups"
+discourse_backup_retention_days: 30
