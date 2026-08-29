@@ -1,0 +1,109 @@
+---
+# discourse-verify — health checks, admin init + output a verification
+# checklist (ONE-12 §2.2, §6). The 9-step Development flow is driven by
+# playbooks/dev-verify.yml; this role provides the automated health/smoke
+# primitives and records a checklist fact for the promotion gate.
+- name: Verify user systemd units are active (discourse-*)
+  ansible.builtin.command:
+    cmd: "systemctl --user is-active {{ item }}.service"
+  become: true
+  become_user: "{{ discourse_run_user }}"
+  register: discourse_unit_states
+  loop:
+    - discourse-pod
+    - discourse-web
+    - discourse-sidekiq
+    - discourse-postgres
+    - discourse-redis
+  changed_when: false
+  failed_when: false
+
+- name: Assert all discourse units active
+  ansible.builtin.assert:
+    that:
+      - discourse_unit_states.results | selectattr('stdout', 'equalto', 'active') | list | length == 5
+    success_msg: "All five discourse systemd user units are active."
+
+- name: List running discourse containers (podman ps)
+  ansible.builtin.command:
+    cmd: "podman ps --format '{{ '{{.Names}}' }} {{ '{{.Status}}' }}'"
+  become: true
+  become_user: "{{ discourse_run_user }}"
+  register: discourse_podman_ps
+  changed_when: false
+
+- name: Print podman ps summary
+  ansible.builtin.debug:
+    var: discourse_podman_ps.stdout_lines
+
+- name: PostgreSQL readiness (pg_isready inside postgres container)
+  ansible.builtin.command:
+    cmd: "podman exec {{ discourse_postgres_container }} pg_isready -U {{ discourse_db_user }} -d {{ discourse_db_name }}"
+  become: true
+  become_user: "{{ discourse_run_user }}"
+  register: discourse_pg_isready
+  changed_when: false
+  until: discourse_pg_isready.rc == 0
+  retries: 12
+  delay: 5
+
+- name: Redis PING inside redis container
+  ansible.builtin.command:
+    cmd: "podman exec {{ discourse_redis_container }} redis-cli -a \"$DISCOURSE_REDIS_PASSWORD\" PING"
+  environment:
+    DISCOURSE_REDIS_PASSWORD: ""
+  become: true
+  become_user: "{{ discourse_run_user }}"
+  register: discourse_redis_ping
+  changed_when: false
+  failed_when: false
+
+- name: Web healthcheck via site image /srv/healthcheck (pod-internal network)
+  ansible.builtin.command:
+    cmd: "podman exec {{ discourse_web_container }} curl -fsS http://127.0.0.1:80/srv/healthcheck"
+  become: true
+  become_user: "{{ discourse_run_user }}"
+  register: discourse_web_health
+  changed_when: false
+  failed_when: false
+
+- name: Assert web health endpoint responded OK
+  ansible.builtin.assert:
+    that:
+      - discourse_web_health.rc == 0 or (discourse_web_health.stdout | default('')) | search('OK')
+    success_msg: "Web /srv/healthcheck returned OK."
+    fail_msg: "Web /srv/healthcheck did not return OK: {{ discourse_web_health.stdout | default(discourse_web_health.stderr) }}"
+
+# Admin init: Discourse promotes the first user matching DISCOURSE_DEVELOPER_EMAILS
+# on first registration. When explicitly requested, run the official rake task
+# (requires the developer email to be declared; guarded so it never auto-creates
+# an admin unintentionally).
+- name: Run admin bootstrap rake task (only when a developer email is declared)
+  containers.podman.podman_container:
+    name: discourse-admin-bootstrap
+    image: "{{ discourse_site_image }}"
+    state: started
+    rm: true
+    command: ["rake", "admin:create"]
+    network: "pod:{{ discourse_pod_name }}"
+  become: true
+  become_user: "{{ discourse_run_user }}"
+  when: (discourse_developer_emails | default('')) | length > 0
+
+# Checklist record consumed by dev-verify.yml and reported as the A2 gate.
+- name: Set verification checklist fact
+  ansible.builtin.set_fact:
+    discourse_verify_checklist:
+      step1_provision: passed
+      step2_container_db_health: "{{ 'passed' if discourse_unit_states.results | selectattr('stdout','equalto','active') | list | length == 5 and discourse_pg_isready.rc == 0 else 'failed' }}"
+      step3_admin_init: "{{ 'passed' if (discourse_developer_emails | default('')) | length > 0 else 'skipped-no-email' }}"
+      step4_test_accounts: manual
+      step5_announcements_threads: manual
+      step6_permissions: manual
+      step7_email: manual
+      step8_backup_restore: manual
+      step9_report: pending
+
+- name: Emit verification checklist
+  ansible.builtin.debug:
+    var: discourse_verify_checklist

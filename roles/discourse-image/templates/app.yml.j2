@@ -1,0 +1,31 @@
+# Discourse site template — used by the discourse-image role to build the
+# site image (ONE-12 plan §1.3 path A). Produced by Ansible from this template
+# with the pinned discourse_version; mirrors the official `samples/standalone.yml`
+# tunable layout so the resulting image is a deterministic, re-runnable build.
+# SECRET VALUES are NOT baked into the image; DB/SMTP/Redis credentials are
+# injected at runtime via the host 0600 env files.
+templates:
+  - "templates/postgres.template.yml"
+  - "templates/redis.template.yml"
+  - "templates/web.template.yml"
+  - "templates/unicorn.template.yml"
+
+params:
+  ## Which Git revision / version should this site be checked out to?
+  #   (your site version tag; bump to upgrade, then rebuild + migrate)
+  version: {{ discourse_version }}
+
+  # Defaults to base image + Ruby version (see templates/base.yml)
+  ruby_version: 3.3
+
+  ## Include additional templates here (var name = template name without extension)
+  # my_custom_template: enable
+
+## Site hostname (baked as the build-time default only; runtime hostname and
+## env come from the host-side discourse.env file).
+env:
+  DISCOURSE_HOSTNAME: {{ discourse_force_hostname }}
+
+## Any custom commands to run after building
+run:
+  - exec: echo "discourse-site built from pinned version {{ discourse_version }}"

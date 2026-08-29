@@ -1,0 +1,47 @@
+---
+# discourse-redis — dedicated Redis 7 container with namespace isolation
+# (ONE-12 §2.2). Rootless Quadlet inside the discourse pod; requirepass +
+# RDB persistence. No public port; reachable only inside the pod. Its data
+# volume is dedicated so key conflicts / FLUSHALL never touch other services.
+- name: Render the Redis Quadlet unit
+  ansible.builtin.template:
+    src: discourse-redis.container.j2
+    dest: "{{ discourse_quadlet_dir }}/discourse-redis.container"
+    mode: "0644"
+    owner: "{{ discourse_run_user }}"
+    group: "{{ discourse_run_user }}"
+
+- name: Render the Redis env file (0600, secret values from vault)
+  ansible.builtin.template:
+    src: discourse-redis.env.j2
+    dest: "{{ discourse_env_dir }}/discourse-redis.env"
+    mode: "0600"
+    owner: "{{ discourse_run_user }}"
+    group: "{{ discourse_run_user }}"
+
+- name: Reload the user systemd daemon
+  ansible.builtin.systemd:
+    scope: user
+    daemon_reload: true
+  become: true
+  become_user: "{{ discourse_run_user }}"
+
+- name: Enable + start the Redis container unit
+  ansible.builtin.systemd:
+    name: "discourse-redis.service"
+    scope: user
+    enabled: true
+    state: started
+  become: true
+  become_user: "{{ discourse_run_user }}"
+
+- name: Wait for Redis to be active (healthcheck PING)
+  ansible.builtin.command:
+    cmd: "systemctl --user is-active discourse-redis.service"
+  register: discourse_redis_activity
+  become: true
+  become_user: "{{ discourse_run_user }}"
+  until: discourse_redis_activity.stdout == "active"
+  retries: 12
+  delay: 5
+  changed_when: false

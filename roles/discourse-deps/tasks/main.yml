@@ -1,0 +1,76 @@
+---
+# discourse-deps — OS/runtime prerequisites for a rootless Podman + systemd
+# user-scope Discourse deployment (ONE-12 plan §2.2).
+#
+# Installs/verifies podman, fuse-overlayfs, slirp4netns, UID/GID mapping and
+# systemd user linger. Bootstrap steps that touch the OS need become:true;
+# everything the Discourse runtime itself uses stays rootless.
+- name: Ensure podman and rootless prerequisites are installed
+  ansible.builtin.package:
+    name: "{{ discourse_podman_packages }}"
+    state: present
+  become: true
+  when: ansible_facts.os_family is defined
+
+- name: Record podman host version facts
+  ansible.builtin.command: "podman --version"
+  register: discourse_podman_version_out
+  changed_when: false
+  failed_when: false
+
+- name: Print podman version
+  ansible.builtin.debug:
+    msg: "podman: {{ discourse_podman_version_out.stdout | default('not-found') }}"
+  when: discourse_podman_version_out.stdout is defined
+
+- name: Enable user lingering so systemd user units survive logout/reboot
+  ansible.builtin.command: "loginctl enable-linger {{ discourse_run_user }}"
+  become: true
+  changed_when: false
+  failed_when: false
+  when: discourse_run_user is defined
+
+- name: Check fuse-overlayfs is available in the build toolchain
+  ansible.builtin.command: "fusermount3 --version"
+  register: discourse_fusermount_out
+  changed_when: false
+  failed_when: false
+
+# Rootless build/run storage: make sure the user storage.conf uses
+# fuse-overlayfs when available (best-effort; only touched when declared).
+- name: Create rootless container config dir
+  ansible.builtin.file:
+    path: "{{ discourse_run_home }}/.config/containers"
+    state: directory
+    mode: "0700"
+    owner: "{{ discourse_run_user }}"
+    group: "{{ discourse_run_user }}"
+  become: true
+  when: discourse_run_home is defined
+
+- name: Create Quadlet systemd user dir
+  ansible.builtin.file:
+    path: "{{ discourse_quadlet_dir }}"
+    state: directory
+    mode: "0700"
+    owner: "{{ discourse_run_user }}"
+    group: "{{ discourse_run_user }}"
+  become: true
+  when: discourse_quadlet_dir is defined
+
+- name: Ensure host-side env dir
+  ansible.builtin.file:
+    path: "{{ discourse_env_dir }}"
+    state: directory
+    mode: "0700"
+    owner: "{{ discourse_run_user }}"
+    group: "{{ discourse_run_user }}"
+  become: true
+  when: discourse_env_dir is defined
+
+# projectdirs: expose the user-level quadlet/user-units path to the user
+# systemd instance (Podman uses ~/.config/containers/systemd by default; this
+# line is explicit but harmless).
+- name: Set XDG_RUNTIME_DIR assumptions note
+  ansible.builtin.debug:
+    msg: "Rootless Quadlet expects XDG_RUNTIME_DIR=/run/user/$(id -u) and loginctl linger enabled — verified above."

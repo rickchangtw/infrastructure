@@ -1,0 +1,10 @@
+# Discourse backup timer (rootless systemd user) — ONE-12 §3.6
+[Unit]
+Description=Discourse daily backup
+
+[Timer]
+OnCalendar=daily
+Persistent=true
+
+[Install]
+WantedBy=timers.target
