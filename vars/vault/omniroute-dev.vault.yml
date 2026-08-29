@@ -1,0 +1,18 @@
+# vars/vault/omniroute-dev.vault.yml - EMPTY Ansible-vault STRUCTURE.
+#
+# This is the committed TEMPLATE ONLY (zero secret values). Real secrets are
+# filled + encrypted on the dev host and must NEVER be committed:
+#
+#   ansible-vault encrypt vars/vault/omniroute-dev.vault.yml
+#   ansible-vault edit   vars/vault/omniroute-dev.vault.yml
+#
+# Then run playbooks with --vault-password-file (or --ask-vault-pass).
+#
+# Secret NAMES per ONE-10 feasibility §5 (names only - never values in git):
+#   - OMNIROUTE_API_KEY          -> omniroute_api_key
+#   - OMNIROUTE_INITIAL_PASSWORD -> omniroute_initial_password
+#     (the dashboard password that replaces OmniRoute's default plaintext
+#      "CHANGEME"; set it BEFORE first boot)
+
+omniroute_api_key: ""
+omniroute_initial_password: ""

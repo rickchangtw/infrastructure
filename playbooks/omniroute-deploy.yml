@@ -1,0 +1,108 @@
+---
+# Deploy OmniRoute gateway on the Development (paperclip-v1) host.
+#
+# Implements ONE-10 `infra-proposal` rev2 (Podman rootless), approved.
+#   - ROOTLESS Podman: the container runtime is a non-root user; no root
+#     daemon, no elevation for the container itself.
+#   - Loopback ONLY: the gateway binds 127.0.0.1:20128 and is never exposed.
+#   - systemd USER unit `container-omniroute` manages lifecycle (boot
+#     persistence + crash restart) via `loginctl enable-linger`.
+#   - INITIAL_PASSWORD + OMNIROUTE_API_KEY are read ONLY from the Ansible
+#     vault (vars/vault/omniroute-dev.vault.yml); never from the CLI, never
+#     printed, never committed in plaintext.
+#   - Version pinned to immutable image tag diegosouzapw/omniroute:v3.8.51 so
+#     upgrades and rollback stay deterministic.
+#
+# Boundaries: does NOT touch 3101 Paperclip/Hermes, Production, firewall, or
+# the existing proxy. It only brings up the local gateway + snapshots the
+# current Paperclip agent env (the rollback restore point).
+- name: Deploy OmniRoute gateway (Development only, Podman rootless)
+  hosts: omniroute_dev
+  become: false                 # rootless: do NOT elevate for the container
+  vars_files:
+    - ../vars/omniroute-dev.yml
+    - ../vars/vault/omniroute-dev.vault.yml   # OMNIROUTE_API_KEY / OMNIROUTE_INITIAL_PASSWORD
+
+  tasks:
+    - name: Ensure podman is installed
+      ansible.builtin.package:
+        name: podman
+        state: present
+      become: true
+      when: ansible_facts.os_family == "RedHat" or ansible_facts.os_family == "Debian"
+
+    - name: Ensure podman user systemd directory exists
+      ansible.builtin.file:
+        path: "{{ ansible_facts.env.HOME }}/.config/systemd/user"
+        state: directory
+        mode: "0700"
+      when: ansible_facts.env.HOME is defined
+      become: false
+
+    - name: Enable user lingering so systemd user units survive logout/reboot
+      ansible.builtin.command: loginctl enable-linger {{ ansible_user_id }}
+      become: true
+      changed_when: false
+      failed_when: false
+      when: omniroute_enable_linger and ansible_user_id is defined
+
+    # Rollback restore point (omniroute-rollback.yml restores this snapshot):
+    # capture the CURRENT Paperclip agent env BEFORE anything changes.
+    - name: Check current Paperclip agent env file exists
+      ansible.builtin.stat:
+        path: "{{ paperclip_env_path }}"
+      when: paperclip_env_path is defined and paperclip_env_path | length > 0
+      register: agent_env_stat
+
+    - name: Snapshot agent env to backup path (rollback restore point)
+      ansible.builtin.copy:
+        src: "{{ paperclip_env_path }}"
+        dest: "{{ paperclip_env_backup_path }}"
+        remote_src: true
+      when:
+        - paperclip_env_path is defined and paperclip_env_path | length > 0
+        - agent_env_stat.stat is defined and agent_env_stat.stat.exists
+
+    - name: Pull omniroute image (pinned tag)
+      containers.podman.podman_image:
+        name: "{{ omniroute_image }}"
+        state: present
+
+    - name: Run OmniRoute container as a rootless systemd user unit
+      containers.podman.podman_container:
+        name: "{{ omniroute_container_name }}"
+        image: "{{ omniroute_image }}"
+        state: started
+        recreate: true
+        restart_policy: unless-stopped
+        env:
+          INITIAL_PASSWORD: "{{ omniroute_initial_password }}"   # replaces default "CHANGEME"
+          PORT: "{{ omniroute_port }}"
+        ports:
+          - "{{ omniroute_host }}:{{ omniroute_port }}:{{ omniroute_port }}"   # loopback only
+        volumes:
+          - "{{ omniroute_data_dir }}:/data:Z"   # :Z = rootless SELinux relabel
+        generate_systemd:
+          path: "{{ ansible_facts.env.HOME }}/.config/systemd/user"
+          container_prefix: container
+          restart_policy: always
+          stop_timeout: 120
+      when: ansible_facts.env.HOME is defined
+
+    - name: Enable + start podman systemd user unit
+      ansible.builtin.systemd:
+        name: "{{ omniroute_unit_name }}"
+        scope: user
+        enabled: true
+        state: started
+        daemon_reload: true
+
+    - name: Wait for API readiness
+      ansible.builtin.uri:
+        url: "http://{{ omniroute_host }}:{{ omniroute_port }}/v1/models"
+        status_code: [200, 401, 403, 404]   # any HTTP reply => API is up
+        timeout: 30
+      register: api_check
+      until: api_check.status in [200, 401, 403, 404]
+      retries: 10
+      delay: 3

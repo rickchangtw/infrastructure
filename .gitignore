@@ -1,0 +1,13 @@
+# Local / runtime state — NEVER commit
+.ansible/
+*.retry
+*.retry.json
+
+# Host-side env files (values, never commit)
+**/*.env
+!templates/env/*.j2
+
+# Anything that could contain a literal secret value
+*_PASSWORD
+*_API_KEY
+.ansible-vault-pass
