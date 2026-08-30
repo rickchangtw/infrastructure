@@ -9,9 +9,11 @@ discourse_env: development
 discourse_site_hostname: "{{ dev_site_hostname | default('pollux.infra') }}"
 discourse_version: "v3.2.4"
 
-# Install owner for rootless Podman / systemd user units
-discourse_run_user: deploy
-discourse_run_home: "{{ discourse_run_home_lookup | default('/home/deploy') }}"
+# Install owner for rootless Podman / systemd user units.
+# `rick` is the operator-confirmed rootless deploy account on the dev host
+# (2026-08-29, NOT `deploy`) - matches inventories/omniroute-dev.ini.
+discourse_run_user: rick
+discourse_run_home: "{{ discourse_run_home_lookup | default('/home/rick') }}"
 
 # Dev does not terminate TLS itself; internal hostname + plain http on the
 # pod-internal network. No public port is published.
