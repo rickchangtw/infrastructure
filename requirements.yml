@@ -1,4 +1,4 @@
-# Ansible collection requirements for the OmniRoute playbooks.
+# Ansible collection requirements for the Discourse playbooks.
 # Install with: ansible-galaxy collection install -r requirements.yml
 collections:
   - name: containers.podman
