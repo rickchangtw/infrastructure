@@ -7,10 +7,16 @@
 # Steps 1-3 are automated here; steps 4-9 are scripted manual QA actions that
 # the operator executes and records as the A2 promotion checklist. Results are
 # posted back to the ONE-14 issue as evidence (never secrets).
+#
+# NOTE (dev-run finding): repo-root group_vars/ (discourse.yml) is NOT
+# auto-loaded when -i inventories/development/hosts.ini is used, so the shared
+# Discourse variables are loaded explicitly here.
 - name: Verify Discourse Development deployment (9-step)
   hosts: discourse_dev
   gather_facts: false
   become: false
+  vars_files:
+    - ../group_vars/discourse.yml
 
   roles:
     - role: discourse-verify

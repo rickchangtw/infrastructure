@@ -19,6 +19,9 @@
   hosts: discourse_prod
   gather_facts: true
   become: false
+  vars_files:
+    - ../group_vars/discourse.yml
+    - ../group_vars/discourse_production.yml
 
   pre_tasks:
     - name: Refuse to run without explicit board approval reference

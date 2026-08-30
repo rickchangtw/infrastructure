@@ -10,10 +10,17 @@
 #
 # Secret VALUES are supplied via the vault vars file at run time; the dev vault
 # stub lives at vars/vault/discourse-dev.vault.yml (empty structure, no values).
+#
+# NOTE (dev-run finding): repo-root group_vars/ (discourse.yml) is NOT
+# auto-loaded when -i inventories/development/hosts.ini is used, so the shared
+# Discourse variables are loaded explicitly here. Keep this vars_files in sync
+# with prod-promote.yml when adding shared variables.
 - name: Provision Discourse site (Development)
   hosts: discourse_dev
   gather_facts: true
   become: false
+  vars_files:
+    - ../group_vars/discourse.yml
 
   pre_tasks:
     - name: Ensure required secret variables are non-empty (never deploy empties)
