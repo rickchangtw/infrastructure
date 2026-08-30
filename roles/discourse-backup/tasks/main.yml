@@ -1,0 +1,67 @@
+---
+# discourse-backup — pg_dump + file backup via a rootless systemd-user timer
+# (ONE-12 §2.2, §3.6). Retention and paths are runtime vars; secrets never
+# appear here (they are read from the host env files by the script).
+- name: Create discourse bin dir on the host
+  ansible.builtin.file:
+    path: "{{ discourse_run_home }}/discourse/bin"
+    state: directory
+    mode: "0700"
+    owner: "{{ discourse_run_user }}"
+    group: "{{ discourse_run_user }}"
+  become: true
+
+- name: Copy backup/restore/healthcheck scripts to the host
+  ansible.builtin.copy:
+    src: "{{ item }}"
+    dest: "{{ discourse_run_home }}/discourse/bin/{{ item | basename }}"
+    mode: "0700"
+    owner: "{{ discourse_run_user }}"
+    group: "{{ discourse_run_user }}"
+  become: true
+  loop:
+    - discourse-backup.sh
+    - discourse-restore.sh
+    - discourse-healthcheck.sh
+
+- name: Create backup destination directory
+  ansible.builtin.file:
+    path: "{{ discourse_backup_dest }}"
+    state: directory
+    mode: "0700"
+    owner: "{{ discourse_run_user }}"
+    group: "{{ discourse_run_user }}"
+  become: true
+
+- name: Render the backup timer unit
+  ansible.builtin.template:
+    src: discourse-backup.timer.j2
+    dest: "{{ discourse_quadlet_dir }}/discourse-backup.timer"
+    mode: "0644"
+    owner: "{{ discourse_run_user }}"
+    group: "{{ discourse_run_user }}"
+
+- name: Render the backup service unit
+  ansible.builtin.template:
+    src: discourse-backup.service.j2
+    dest: "{{ discourse_quadlet_dir }}/discourse-backup.service"
+    mode: "0644"
+    owner: "{{ discourse_run_user }}"
+    group: "{{ discourse_run_user }}"
+
+- name: Reload user systemd daemon
+  ansible.builtin.systemd:
+    scope: user
+    daemon_reload: true
+  become: true
+  become_user: "{{ discourse_run_user }}"
+
+- name: Enable + start the backup timer
+  ansible.builtin.systemd:
+    name: "discourse-backup.timer"
+    scope: user
+    enabled: true
+    state: started
+  become: true
+  become_user: "{{ discourse_run_user }}"
+  when: discourse_backup_hook_enabled | default(true)

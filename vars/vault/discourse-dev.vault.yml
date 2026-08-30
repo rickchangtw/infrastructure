@@ -1,0 +1,12 @@
+---
+# discourse-dev.vault.yml — Development secret values (ENCRYPTED; do not commit).
+#
+# NEVER put real values in git. Decrypt + edit with:
+#   ansible-vault edit vars/vault/discourse-dev.vault.yml
+#
+# Variable names expected here (values only on this encrypted file / host):
+discourse_db_password: ""      # DISCOURSE_DB_PASSWORD / POSTGRES_PASSWORD
+discourse_redis_password: ""   # DISCOURSE_REDIS_PASSWORD
+discourse_smtp_username: ""    # DISCOURSE_SMTP_USER_NAME
+discourse_smtp_password: ""    # DISCOURSE_SMTP_PASSWORD
+discourse_developer_emails: "" # DISCOURSE_DEVELOPER_EMAILS (dev admin email)

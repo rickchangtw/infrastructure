@@ -1,0 +1,5 @@
+# Ansible collection requirements for the Discourse playbooks.
+# Install with: ansible-galaxy collection install -r requirements.yml
+collections:
+  - name: containers.podman
+    version: ">=1.16.0,<2.0.0"

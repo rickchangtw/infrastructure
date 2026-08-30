@@ -1,0 +1,52 @@
+---
+# prod-promote.yml — GATED Production promotion (ONE-12 §9, A3-A5)
+#
+# This playbook targets the `discourse_prod` group ONLY. It is NOT reachable
+# from the development inventory: inventories/development/hosts.ini never
+# defines `discourse_prod`, so running it with `-i inventories/development`
+# yields an empty match and does nothing.
+#
+# Production MUST be individually approved before this ever runs (A3 DNS/TLS,
+# A4 promotion plan review, A5 go-live window). It is a no-op unless every
+# guard below is satisfied:
+#   * --inventory inventories/production/hosts.ini (populated by a human)
+#   * --extra-vars "promotion_consent=<board-approval-ref>" (named approval)
+#
+# Run (only after human approval of A3/A4/A5):
+#   ansible-playbook -i inventories/production/hosts.ini playbooks/prod-promote.yml \
+#       --extra-vars "promotion_consent=<ref-to-approval>"
+- name: Promote Discourse to Production (GATED)
+  hosts: discourse_prod
+  gather_facts: true
+  become: false
+  vars_files:
+    - ../group_vars/discourse.yml
+    - ../group_vars/discourse_production.yml
+
+  pre_tasks:
+    - name: Refuse to run without explicit board approval reference
+      ansible.builtin.assert:
+        that:
+          - promotion_consent is defined
+          - promotion_consent | length > 0
+        fail_msg: >-
+          GATED: no promotion_consent supplied. This playbook only runs after
+          a human approves A3/A4/A5 and passes
+          --extra-vars "promotion_consent=<approval-ref>".
+        success_msg: "Production promotion consented via {{ promotion_consent }}"
+
+    - name: Refuse when the production inventory is still empty
+      ansible.builtin.assert:
+        that:
+          - groups['discourse_prod'] | length > 0
+        fail_msg: "GATED: inventories/production/hosts.ini has no discourse_prod host."
+        success_msg: "Production hosts present ({{ groups['discourse_prod'] | join(', ') }})."
+
+  roles:
+    - role: discourse-deps
+    - role: discourse-image
+    - role: discourse-db
+    - role: discourse-redis
+    - role: discourse-web
+    - role: discourse-verify
+    - role: discourse-backup

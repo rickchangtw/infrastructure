@@ -1,0 +1,10 @@
+# Production overrides (ONE-12)
+#
+# Applied only to hosts in the `discourse_prod` group. These values are the
+# extra/pinned settings specific to Production. NO SECRETS here.
+#
+# This file is intentionally thin: most shared tuning lives in
+# group_vars/discourse.yml and the environment-specific values live in
+# inventories/<env>/group_vars/all.yml. Keeping Production-specific values
+# here avoids accidental leakage of dev-only settings and prevents the
+# development inventory from ever matching the production group below.

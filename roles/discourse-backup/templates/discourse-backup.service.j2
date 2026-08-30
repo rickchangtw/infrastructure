@@ -1,0 +1,8 @@
+# Discourse backup one-shot service (rootless systemd user) — ONE-12 §3.6
+[Unit]
+Description=Discourse backup job
+
+[Service]
+Type=oneshot
+ExecStart={{ discourse_run_home }}/discourse/bin/discourse-backup.sh
+{% if discourse_backup_retention_days is defined %}Environment=DISCOURSE_BACKUP_RETENTION_DAYS={{ discourse_backup_retention_days }}{% endif %}

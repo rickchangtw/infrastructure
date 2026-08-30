@@ -1,0 +1,8 @@
+# Host vars for Production host prod-dc1 (empty until A3/A4/A5 approval)
+#
+# Placeholder. Populate the production host address in
+# inventories/production/hosts.ini and add any host-specific values here only
+# after the individual production gates are approved by a human.
+#
+# NO SECRETS in git; Production secret values go in host 0600 env files or
+# vars/vault/discourse-prod.vault.yml, never into this file.

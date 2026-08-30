@@ -1,0 +1,44 @@
+---
+# site.yml — full Discourse provision (Development scope, ONE-12 / ONE-14)
+#
+# Run:  ansible-playbook -i inventories/development/hosts.ini playbooks/site.yml
+#
+# SAFETY: this playbook always runs against the `discourse_dev` group ONLY.
+# The production host group (discourse_prod, used by prod-promote.yml) is never
+# defined by the development inventory, so it can never be reached here. See
+# playbooks/prod-promote.yml for the gated Production path (manual A3-A5 only).
+#
+# Secret VALUES are supplied via the vault vars file at run time; the dev vault
+# stub lives at vars/vault/discourse-dev.vault.yml (empty structure, no values).
+#
+# NOTE (dev-run finding): repo-root group_vars/ (discourse.yml) is NOT
+# auto-loaded when -i inventories/development/hosts.ini is used, so the shared
+# Discourse variables are loaded explicitly here. Keep this vars_files in sync
+# with prod-promote.yml when adding shared variables.
+- name: Provision Discourse site (Development)
+  hosts: discourse_dev
+  gather_facts: true
+  become: false
+  vars_files:
+    - ../group_vars/discourse.yml
+
+  pre_tasks:
+    - name: Ensure required secret variables are non-empty (never deploy empties)
+      ansible.builtin.assert:
+        that:
+          - discourse_db_password | length > 0
+          - discourse_redis_password | length > 0
+        success_msg: "Secret variables present (from vault/host env)."
+        fail_msg: >-
+          Missing discourse_db_password and/or discourse_redis_password.
+          Supply them via the Ansible vault (vars/vault/discourse-dev.vault.yml)
+          or per-host 0600 env files. No secret value is ever committed to git.
+
+  roles:
+    - role: discourse-deps
+    - role: discourse-image
+    - role: discourse-db
+    - role: discourse-redis
+    - role: discourse-web
+    - role: discourse-verify
+    - role: discourse-backup

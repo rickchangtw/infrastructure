@@ -1,0 +1,77 @@
+# Shared Discourse variables (ONE-12 / ONE-14)
+#
+# Group-scoped variables applied to every host in the `discourse` group.
+# NO SECRETS here — only variable NAMES and structural defaults. Secret
+# values are injected at run time from host-side 0600 env files or the
+# Ansible vault (vars/vault/*.vault.yml).
+
+# --- Naming / images -----------------------------------------------------
+discourse_pod_name: discourse
+discourse_image_base: "docker.io/library"
+discourse_postgres_image: "docker.io/library/postgres:15-alpine"
+discourse_redis_image: "docker.io/library/redis:7-alpine"
+
+# Build context for the site image (local to the target host)
+discourse_build_dir: "{{ discourse_run_home }}/discourse/build"
+
+# Site image is built by the discourse-image role from the templated app.yml.
+discourse_site_image: "localhost/discourse-site:{{ discourse_version }}"
+discourse_image_repo: "localhost/discourse-site"
+
+# --- Pod / containers -----------------------------------------------------
+discourse_web_container: discourse-web
+discourse_sidekiq_container: discourse-sidekiq
+discourse_postgres_container: discourse-postgres
+discourse_redis_container: discourse-redis
+
+# Internal container ports (published on the pod-internal network only; NOT
+# exposed on any public interface).
+discourse_web_port: 80
+discourse_postgres_port: 5432
+discourse_redis_port: 6379
+
+# Rootless SELinux relabel (host dirs owned by the run user).
+discourse_volume_z: "Z"
+
+# Persistent volumes (dedicated to Discourse only; never shared with the
+# existing Paperclip/Hermes/SmartCondo/monitoring data).
+discourse_pgdata_volume: discourse-pgdata
+discourse_redisdata_volume: discourse-redis-data
+discourse_shared_volume: discourse-shared   # /shared (uploads + app data)
+discourse_logs_volume: discourse-logs       # /var/log
+
+# --- Database (Discourse-dedicated PG15) ---------------------------------
+discourse_db_name: discourse
+discourse_db_user: discourse_app
+# DISCOURSE_DB_PASSWORD lives ONLY in the host env file / vault. Not here.
+
+# --- Redis (Discourse-dedicated Redis7) ----------------------------------
+discourse_redis_db: 0
+discourse_redis_maxmemory: "256mb"
+# DISCOURSE_REDIS_PASSWORD lives ONLY in the host env file / vault. Not here.
+
+# --- Site tunables (fed into templates/app.yml.j2) ------------------------
+discourse_developer_emails: ""          # real value from vault (no secret itself, but held out of git)
+discourse_notification_email: ""
+discourse_admin_username: "admin"
+discourse_force_hostname: "{{ discourse_site_hostname }}"
+
+# --- Backup hook ----------------------------------------------------------
+discourse_backup_hook_enabled: true
+
+# --- Secret value placeholders (DEFAULTS EMPTY — never commit real values) ---
+# Real secret VALUES come ONLY from the host-side 0600 env files or the Ansible
+# vault (vars/vault/*.vault.yml) supplied at deploy time. The site.yml pre-flight
+# guard fails a real run before deploying if any of these resolve empty.
+discourse_db_password: ""
+discourse_redis_password: ""
+discourse_smtp_username: ""
+discourse_smtp_password: ""
+
+# --- Runtime / OS deps (discourse-deps) -----------------------------------
+discourse_podman_packages:
+  - podman
+  - fuse-overlayfs
+  - slirp4netns
+  - uidmap
+  - systemd-container

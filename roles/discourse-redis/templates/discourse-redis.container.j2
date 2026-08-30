@@ -1,0 +1,27 @@
+# Discourse Redis 7 container (dedicated, rootless) — ONE-12 plan §2.3
+# Dedicated Redis instance with requirepass + RDB persistence. No public
+# port; only reachable inside the pod. Volume never shared with existing
+# services.
+[Unit]
+Description=Discourse Redis
+Requires={{ discourse_pod_name }}.pod
+After={{ discourse_pod_name }}.pod
+
+[Container]
+ContainerName={{ discourse_redis_container }}
+Pod={{ discourse_pod_name }}.pod
+Image={{ discourse_redis_image }}
+EnvironmentFile={{ discourse_env_dir }}/discourse-redis.env
+Volume={{ discourse_redisdata_volume }}:/data:{{ discourse_volume_z }}
+Exec=redis-server --appendonly yes --save 60 1000 --dir /data{% if discourse_redis_maxmemory is defined and discourse_redis_maxmemory | length > 0 %} --maxmemory {{ discourse_redis_maxmemory }}{% endif %}
+HealthCmd=redis-cli -a "$DISCOURSE_REDIS_PASSWORD" PING
+HealthInterval=15s
+HealthTimeout=5s
+HealthRetries=5
+
+[Service]
+Restart=on-failure
+TimeoutStartSec=60
+
+[Install]
+WantedBy=default.target

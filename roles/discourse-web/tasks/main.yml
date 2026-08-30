@@ -1,0 +1,81 @@
+---
+# discourse-web — web + sidekiq Quadlet units, env files, systemd user start
+# (ONE-12 §2.2/§2.3). Rootless: units run under `systemctl --user` of the
+# discourse_run_user. No public port is published; the proxy talks to the pod
+# over the pod-internal network.
+- name: Render the discourse pod unit
+  ansible.builtin.template:
+    src: discourse.pod.j2
+    dest: "{{ discourse_quadlet_dir }}/discourse.pod"
+    mode: "0644"
+    owner: "{{ discourse_run_user }}"
+    group: "{{ discourse_run_user }}"
+
+- name: Render the web Quadlet unit
+  ansible.builtin.template:
+    src: discourse-web.container.j2
+    dest: "{{ discourse_quadlet_dir }}/discourse-web.container"
+    mode: "0644"
+    owner: "{{ discourse_run_user }}"
+    group: "{{ discourse_run_user }}"
+
+- name: Render the sidekiq Quadlet unit
+  ansible.builtin.template:
+    src: discourse-sidekiq.container.j2
+    dest: "{{ discourse_quadlet_dir }}/discourse-sidekiq.container"
+    mode: "0644"
+    owner: "{{ discourse_run_user }}"
+    group: "{{ discourse_run_user }}"
+
+- name: Render the web env file (0600, secret values from vault)
+  ansible.builtin.template:
+    src: discourse.env.j2
+    dest: "{{ discourse_env_dir }}/discourse.env"
+    mode: "0600"
+    owner: "{{ discourse_run_user }}"
+    group: "{{ discourse_run_user }}"
+
+- name: Reload the user systemd daemon
+  ansible.builtin.systemd:
+    scope: user
+    daemon_reload: true
+  become: true
+  become_user: "{{ discourse_run_user }}"
+
+- name: Enable + start the web container unit (pulls in pod + DB + Redis)
+  ansible.builtin.systemd:
+    name: "discourse-web.service"
+    scope: user
+    enabled: true
+    state: started
+  become: true
+  become_user: "{{ discourse_run_user }}"
+
+# On first provision the app DB is empty; Discourse boots + migrates itself,
+# but on upgrades we run the migration explicitly before restarting web.
+- name: Run database migrations (best-effort, idempotent rake task)
+  containers.podman.podman_container:
+    name: discourse-migrate-one-shot
+    image: "{{ discourse_site_image }}"
+    state: started
+    rm: true
+    env:
+      DISCOURSE_DB_HOST: "{{ discourse_postgres_container }}"
+      DISCOURSE_DB_PORT: "{{ discourse_postgres_port }}"
+      DISCOURSE_DB_NAME: "{{ discourse_db_name }}"
+      DISCOURSE_DB_USER: "{{ discourse_db_user }}"
+      DISCOURSE_DB_PASSWORD: "{{ discourse_db_password | default('') }}"
+    command: ["rake", "db:migrate"]
+    network: "pod:{{ discourse_pod_name }}"
+  become: true
+  become_user: "{{ discourse_run_user }}"
+  when: discourse_run_migrations | default(true)
+
+- name: Enable + start the sidekiq container unit
+  ansible.builtin.systemd:
+    name: "discourse-sidekiq.service"
+    scope: user
+    enabled: true
+    state: started
+  become: true
+  become_user: "{{ discourse_run_user }}"

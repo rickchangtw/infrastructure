@@ -1,0 +1,28 @@
+# Discourse Web container (rootless, systemd user scope) — ONE-12 plan §2.3
+# No public port is published. Reverse proxy reaches it over the pod-internal
+# network (or by joining the same pod network namespace).
+[Unit]
+Description=Discourse Web
+Requires={{ discourse_postgres_container }}.service {{ discourse_redis_container }}.service
+After={{ discourse_postgres_container }}.service {{ discourse_redis_container }}.service
+
+[Container]
+ContainerName={{ discourse_web_container }}
+Pod={{ discourse_pod_name }}.pod
+Image={{ discourse_site_image }}
+EnvironmentFile={{ discourse_env_dir }}/discourse.env
+Volume={{ discourse_shared_volume }}:/shared:{{ discourse_volume_z }}
+Volume={{ discourse_logs_volume }}:/var/log:{{ discourse_volume_z }}
+{% if discourse_dev_shm_size is defined and discourse_dev_shm_size | length > 0 %}DevShmSize={{ discourse_dev_shm_size }}
+{% endif %}
+HealthCmd=/usr/local/bin/healthcheck.sh || /srv/healthcheck
+HealthInterval=30s
+HealthTimeout=5s
+HealthRetries=5
+
+[Service]
+Restart=on-failure
+TimeoutStartSec=120
+
+[Install]
+WantedBy=default.target

@@ -1,0 +1,49 @@
+---
+# discourse-db — dedicated PostgreSQL 15 container + DB/user setup (ONE-12 §2.2)
+#
+# The postgres container is a rootless Quadlet inside the discourse pod.
+# Dedicated DB name/user/password come from the host-side env file (rendered
+# from the vault at deploy time, 0600 on the host). No public port: the DB is
+# only reachable inside the pod, never from the host interface.
+- name: Render the postgres Quadlet unit
+  ansible.builtin.template:
+    src: discourse-postgres.container.j2
+    dest: "{{ discourse_quadlet_dir }}/discourse-postgres.container"
+    mode: "0644"
+    owner: "{{ discourse_run_user }}"
+    group: "{{ discourse_run_user }}"
+
+- name: Render the postgres env file (0600, secret values from vault)
+  ansible.builtin.template:
+    src: discourse-postgres.env.j2
+    dest: "{{ discourse_env_dir }}/discourse-postgres.env"
+    mode: "0600"
+    owner: "{{ discourse_run_user }}"
+    group: "{{ discourse_run_user }}"
+
+- name: Reload the user systemd daemon
+  ansible.builtin.systemd:
+    scope: user
+    daemon_reload: true
+  become: true
+  become_user: "{{ discourse_run_user }}"
+
+- name: Enable + start the postgres container unit
+  ansible.builtin.systemd:
+    name: "discourse-postgres.service"
+    scope: user
+    enabled: true
+    state: started
+  become: true
+  become_user: "{{ discourse_run_user }}"
+
+- name: Wait for PostgreSQL readiness (pg_isready healthcheck)
+  ansible.builtin.command:
+    cmd: "systemctl --user is-active discourse-postgres.service"
+  register: discourse_pg_activity
+  become: true
+  become_user: "{{ discourse_run_user }}"
+  until: discourse_pg_activity.stdout == "active"
+  retries: 12
+  delay: 5
+  changed_when: false
